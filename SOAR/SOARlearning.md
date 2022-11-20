@@ -34,13 +34,13 @@ Gentle Introduction to Soar
 
 # Tutorial.1 Simple Agents
 
-## Introduction
+## 一、Introduction
 
 Soar 是建立智能系统的统一架构，提供一个固定的计算结构，在这个结构中，知识可以被编码并用来产生追求目标的行为。Soar 在很多方面像一门编程语言，尽管是一门专用的语言。Soar 区别于其他编程语言的点在于，它嵌入了一种特定的理论，这种理论由合适的基本体组成，这些基本体隐含推理、学习、计划和其他一些对于智能行为很有必要的能力。Soar 的目标不是建立一个通用编程语言，某些数学计算过程在 Soar 中很困难或很别扭，这些计算过程更适合在 C, C++ 和 Java 中实现。Soar 适合建立**使用大量知识产生行为、追求目标的、自主的**智能体。
 
 Soar 有独立的编辑器：VisaulSoar。
 
-## Part I: Simple Soar Programs
+## 二、Simple Soar Programs
 
 ### 1、安装 Soar
 
@@ -231,16 +231,21 @@ excise --all
 
 ```
 run
+// 没有 input
 --- input phase ---
+
 --- propose phase ---
 Firing propose*hello-world
 (O1 ^name hello-world +)
 (S1 ^operator O1 +)
 =>WM: (15: S1 ^operator O1 +)
 =>WM: (14: O1 ^name hello-world)
+
 --- decision phase ---
+// 只有 decision phase 阶段才能向 working memeory 中添加 ^operator 
 =>WM: (16: S1 ^operator O1)
      1: O: O1 (hello-world)
+     
 --- apply phase ---
 --- Firing Productions (IE) For State At Depth 1 ---
 Firing apply*hello-world
@@ -264,8 +269,8 @@ An agent halted during the run.
 sp {propose*hello-world # 提出 hello-world 运算符规则
     (state <s> ^type state) # 检测 <s> ^type state 结构
 -->
-	# + 表示可供选择
-	# 给任意标识符添加运算符
+	# + 表示 acceptable preference
+	# candidate for selection
     (<s> ^operator <o> +)
     # 给这个运算符命名为 hello-world
     (<o> ^name hello-world)
@@ -452,3 +457,381 @@ sp {water-jug*elaborate*empty
 规则如果书写无误，将在 feedback 窗口中显示：
 
 ![image-20221104154240102](img/image-20221104154240102.png)
+
+#### 5.6 Water-jug 初始化和详细描述
+
+在 `SoarDebugger` 中导入 soar 文件运行。
+
+每一次规则的匹配叫一个 Instantiation 实例。
+
+Soar 的工作循环：
+
+![image-20221107091515446](img/image-20221107091515446.png)
+
+#### 5.7 Water-jug 运算符的提出
+
+Water-jug任务 中有三个运算符：在水桶未满时装满水桶(fill)、在水桶未空时将水倒空(empty)、将一个桶的水全部装入另一桶(pour)。
+
+Soar 中支持 >/>=/</<=/<>。
+
+##### 1. 在 `VisaulSoar` 中添加 fill 运算符：
+
+![image-20221107095611740](img/image-20221107095611740.png)
+
+使用提出运算符模板：
+
+![image-20221107095645183](img/image-20221107095645183.png)
+
+写入如下代码：
+
+```
+sp {water-jug*propose*fill
+   (state <s> ^name water-jug
+              ^jug <j>)
+   # 水桶不为空
+   (<j> ^empty > 0)
+-->
+   (<s> ^operator <o> +)
+   (<op> ^name fill
+         ^fill-jug <j>)
+}
+```
+
+在 Datamap 中进行相应更新：
+
+打开 Datamap，已经存在了 fill 运算符：
+
+![image-20221107100814483](img/image-20221107100814483.png)
+
+需要给这个运算符加上 `fill-jug` 属性，这个属性的值为标识符，使用链接方式：
+
+Ctrl + Shift + 鼠标左键拖动到 fill 运算符：
+
+![image-20221107101255154](img/image-20221107101255154.png)
+
+##### 2. 添加 empty 运算符：
+
+```
+sp {water-jug*propose*empty
+   (state <s> ^name water-jug
+              ^jug <j>)
+   # 水桶非空
+   (<j> ^content > 0)
+-->
+   (<s> ^operator <op> +)
+   # 清空水桶
+   (<op> ^name empty
+         ^empty-jug <j>)
+}
+```
+
+在 Datamap 中添加相应结构。
+
+##### 3. 添加 pour 运算符
+
+```
+sp {water-jug*propose*pour
+   (state <s> ^name water-jug
+              ^jug <i>
+              # 找到和 i 不同的标识符
+              ^jug {<j> <> <i>})
+   # i 非空
+   (<i> ^contents > 0)
+   # j 非满
+   (<j> ^empty > 0)
+-->
+   (<s> ^operator <op> +)
+   (<op> ^name pour
+         ^empty-jug <i>
+         ^fill-jug <j>)
+}
+```
+
+在 Datamap 中添加相应结构。
+
+将所有运算符提出的 “+” 后附带一个 “=”，代表这是一个无关紧要的选择。
+
+#### 5.8 运算符的应用
+
+将运算符的提出代码和应用代码放到一个文件中。
+
+##### 1. fill 运算符
+
+自然语言描述：
+
+若任务名称为 water-jug 并且 fill 运算符被选取，将水桶的装水量改为容量。
+
+```
+sp {apply*fill
+   (state <s> ^operator <op>
+              ^jug <j>)
+   (<op> ^name fill
+         ^fill-jug <j>)
+   (<j> ^volume <volume>
+        ^contents <contents>)
+-->
+	# 装水量为容量
+   (<j> ^contents <volume>
+   # 将原先结构删除
+        ^contents <contenst> -)
+}
+```
+
+##### 2. empty 运算符
+
+```
+sp {apply*empty
+   (state <s> ^operator <op>
+              ^jug <j>)
+   (<op> ^name empty
+         ^empty-jug <j>)
+   (<j> ^volume <volume>
+        ^contents <contents>)
+-->
+	# 将装水量清空
+   (<j> ^contents 0
+   # 将原来装水量结构清除
+        ^contents <contents> -)
+}
+```
+
+##### 3. pour 运算符
+
+有两种情况：倒出水桶的装水量小于盛水桶的空闲量，倒出水桶装水量变为0，盛水桶容量变为盛水量之和。
+
+倒出水桶装水量大于盛水桶空闲量，倒出水桶盛水量=原容量-盛水桶空闲量，盛水桶装水量变为容量。
+
+第一种情况：
+
+```
+sp {apply*pour*will-empty-empty-jug
+   (state <s> ^operator <op>)
+   (<op> ^name pour
+         # 倒出的桶为 i
+         ^empty-jug <i>
+         # 装入的桶为 j
+         ^fill-jug <j>)
+   # 装入桶参数
+   (<j> ^volume <jvol>
+        ^contents <jcon>
+        ^empty <jempty>)
+   # 倒出桶参数
+   (<i> ^volume <ivol>
+        ^contents {<icon> <= <jempty>})
+-->
+   # 倒出桶装水量变为0
+   (<i> ^contents 0
+        ^contents <icon> -)
+   # 装入桶装水量变为和
+   (<j> ^contents (+ <icon> <jcon>)
+        ^contens <jcon> -)
+}
+```
+
+第二种情况：
+
+```
+sp {apply*pour*will-not-empty-empty-jug
+   (state <s> ^operator <op>)
+   (<op> ^name pour
+         # 倒出桶 i
+         ^empty-jug <i>
+         # 装入桶 j
+         ^fil-jug <j>)
+   # 倒出桶参数
+   (<i> ^volume <ivol>
+        ^contents {<icon> > <jempty>})
+   # 装入桶参数
+   (<j> ^volume <jvol>
+        ^contents <jcon>
+        ^empty <jempty>)
+-->
+   # 倒出桶装水量 = 原装水量 - 装入桶剩余量
+   (<i> ^contents (- <icon> <jempty>)
+        ^contents <icon> -)
+   # 装入桶装水量 = 容量
+   (<j> ^contents <jvol>
+        ^contents <jcon> -)
+}
+```
+
+#### 5.9 状态与运算符监控
+
+需要监控运算符的应用与状态的变化。Soar 中监控运算符和状态的规则触发是并行的，且不会影响问题解决。
+
+**状态监控**
+
+```
+# 监控状态
+sp { monitor*state
+   (state <s> ^jug <i><j>)
+   (<i> ^volume 3
+        ^contents <icon>)
+   (<j> ^volume 5
+        ^contents <jcon>)
+-->
+   (write (crlf) | 3 : | <icon> | 5 : | <jcon>)
+}
+```
+
+**empty 运算符监控**
+
+```
+# 监控 empty 运算符
+sp { monitor*empty
+   (state <s> ^name water-jug
+              ^operator <o>)
+   (<o> ^name empty
+        ^empty-jug.volume <volume>)
+-->
+   (write | EMPTY(| <volume> |)| )
+}
+```
+
+**fill 运算符监控**
+
+```
+# 监控 fill 运算符
+sp { monitor*fil
+   (state <s> ^name water-jug
+              ^operator <o>)
+   (<o> ^name fill
+        ^fill-jug.volume <volume>)
+-->
+   (write | Fill(| <volume> |)|)
+}
+```
+
+**pour 运算符监控**
+
+```
+sp { monitor*pour
+   (state <s> ^name water-jug
+              ^operator <o>)
+   (<o> ^name pour
+        ^empty-jug <i>
+        ^fill-jug <j>)
+   (<i> ^volume <ivol> ^contents <icon>)
+   (<j> ^volume <jvol> ^contents <jcon>)
+-->
+   (write |POUR(| <ivol> |:| <icon> |,| <jvol> |:| <jcon> |)|)
+}
+```
+
+#### 5.10 目标状态识别
+
+创建一个目标状态，并在程序运行的过程中不断比较，直到找出这一状态。
+
+在 `initialize-water-jug` 文件中，创建目标状态：
+
+```
+# 创建目标状态
+sp {apply*initialize-water-jug*create*desired-state
+   (state <s> ^operator <op>)
+   (<op> ^name initialize-water-jug)
+-->
+   (<s> ^desired.jug <k>)
+   (<k> ^volume 3
+        ^contents 1)
+}
+```
+
+目标状态识别需要不断比较实现，因此放到 `elaboration` 目录下，新建 `goal-test` 文件：
+
+```
+# 检测目标状态
+sp { detect*goal*achieved
+   (state <s> ^name water-jug
+              ^desired.jug <dj>
+              ^jug <j>)
+   (<dj> ^volume <v> ^contents <c>)
+   (<j> ^volume <v> ^contents <c>)
+-->
+   (write (crlf) |The problem has been solved.|)
+   (halt)
+}
+```
+
+#### 5.11 搜索控制
+
+为了让搜索更加有效，应该添加规则选择最有可能导向目标状态的运算符。需要使用启发式规则让搜索不至于原地转圈。
+
+在 Water-jug 问题中，一个运算符生效后，不要在让另一个完全相反的运算符生效。
+
+#### 5.12 Water-jug 问题状态空间
+
+问题状态空间的定义方式会影响问题解决难易程度。
+
+#### 5.13 Soar 中问题求解步骤
+
+1. 状态表示
+2. 创建初始状态
+3. 状态阐述(elaboration)规则
+4. 运算符提出规则
+5. 运算符应用规则
+6. 运算符与规则监控规则
+7. 目标状态识别规则
+8. 搜索控制规则
+
+# Tutorial.2 Simple External Interaction
+
+## 一、使用规则建立简单吃豆人
+
+**向北移动一步的吃豆人**
+
+运算符的提出：
+
+```
+sp {propose*move-north
+   (state <s> ^type state)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-north)}
+```
+
+运算符应用：
+
+```
+sp {move-north*apply
+   (state <s> ^operator.name move-north
+              ^io.output-link <ol>)
+-->
+   (<ol> ^move.direction north)}
+```
+
+## 二、多次向北移动的吃豆人
+
+### 1、多个运算符实例
+
+向北移动运算符不应该提出一次，应用一次。而应该提出多个运算符实例。
+
+如果使用如下代码，工作内存中一旦存在 ^type 结构，就永远不会改变。就不能提出多个运算符实例。
+
+```
+sp {propose*move-north
+   (state <s> ^type state)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-north)}
+```
+
+Soar 的运行流程：
+
+![image-20221114161416501](img/image-20221114161416501.png)
+
+input-link 有如下结构：
+
+![image-20221114161723980](img/image-20221114161723980.png)
+
+一旦吃豆人移动，其 ^x 和 ^y 都会改变，可以使用如下方式不断产生运算符实例：
+
+```
+sp {propose*move-north
+   (state <s> ^io.input-link.eater <e>)
+   (<e> ^x <x> ^y <y>)
+-->
+   (<s> ^operator <o> +)
+   (<o> ^name move-north)
+}
+```
+
